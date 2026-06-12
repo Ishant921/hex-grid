@@ -1,5 +1,9 @@
 import React from "react";
 
 export default function App() {
-  return <h1>JSX WORKS</h1>;
+  return (
+    <div>
+      <h1>React is Alive 🚀</h1>
+    </div>
+  );
 }

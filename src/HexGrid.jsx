@@ -277,7 +277,7 @@ export default function HexGrid() {
         </div>
       </div>
 
-      <div className="absolute bottom-4 left-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
+      <div className="absolute top-16 left-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
         <div className="mb-1">Brush size: {brushSize}</div>
         <input
           type="range"

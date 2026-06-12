@@ -25,7 +25,7 @@ const ERASER = "ERASER";
 const LABEL_TOOL = "LABEL_TOOL";
 
 const DEFAULT_LEGEND = {
-  "#00FFFF": "Capital Alliance"
+  "#00FFFF": "Capital Alliance",
   "#4ade80": "Alliance 1",
   "#f87171": "HQ Zone",
   "#60a5fa": "Border",

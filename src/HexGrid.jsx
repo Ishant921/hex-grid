@@ -1,4 +1,5 @@
 import React, { useState, useRef, useMemo, useEffect } from "react";
+import html2canvas from "html2canvas";
 
 function hexPoints(cx, cy, size) {
   const points = [];
@@ -82,8 +83,11 @@ export default function HexGrid() {
   const [brushSize, setBrushSize] = useState(1);
   const [selectedTool, setSelectedTool] = useState(PALETTE[0]);
   const [history, setHistory] = useState([]);
+  const [exporting, setExporting] = useState(false);
 
   const lastTouchDist = useRef(null);
+  const containerRef = useRef(null);
+  const svgRef = useRef(null);
 
   const size = baseSize * zoom;
 
@@ -155,14 +159,51 @@ export default function HexGrid() {
     });
   };
 
+  const handleExport = async () => {
+    if (!svgRef.current || !containerRef.current) return;
+    setExporting(true);
+
+    // Save current offset and zoom
+    const prevOffset = { ...offset };
+    const prevZoom = zoom;
+
+    // Center the grid
+    const container = containerRef.current;
+    const cw = container.clientWidth;
+    const ch = container.clientHeight;
+    setOffset({ x: cw / 2, y: ch / 2 });
+    setZoom(0.6);
+
+    // Wait for render
+    await new Promise((res) => setTimeout(res, 500));
+
+    try {
+      const canvas = await html2canvas(container, {
+        useCORS: true,
+        backgroundColor: "#f3f4f6",
+        ignoreElements: (el) => el.classList.contains("no-export"),
+      });
+
+      const link = document.createElement("a");
+      link.download = "svs-plan.png";
+      link.href = canvas.toDataURL("image/png");
+      link.click();
+    } catch (e) {
+      alert("Export failed. Try screenshotting manually.");
+    }
+
+    // Restore
+    setOffset(prevOffset);
+    setZoom(prevZoom);
+    setExporting(false);
+  };
+
   const handleClick = (key) => {
     const [q, r] = key.split(",").map(Number);
     applyTool(q, r);
   };
 
-  const handleRightClick = (e, key) => {
-    e.preventDefault();
-  };
+  const handleRightClick = (e) => e.preventDefault();
 
   const handleWheel = (e) => {
     e.preventDefault();
@@ -208,7 +249,6 @@ export default function HexGrid() {
       setOffset((prev) => ({ x: prev.x + dx, y: prev.y + dy }));
       setLastPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
     }
-
     if (e.touches.length === 2) {
       const newDist = getTouchDistance(e.touches);
       if (lastTouchDist.current) {
@@ -251,7 +291,7 @@ export default function HexGrid() {
           stroke="#374151"
           strokeWidth="1"
           onClick={() => handleClick(key)}
-          onContextMenu={(e) => handleRightClick(e, key)}
+          onContextMenu={handleRightClick}
           onTouchStart={(e) => handleTouchStart(e, key)}
           onMouseEnter={() => setHovered({ q, r })}
           onMouseLeave={() => setHovered(null)}
@@ -262,6 +302,7 @@ export default function HexGrid() {
 
   return (
     <div
+      ref={containerRef}
       className="w-full h-screen bg-gray-100 relative touch-none"
       onWheel={handleWheel}
       onMouseMove={handleMouseMove}
@@ -271,7 +312,7 @@ export default function HexGrid() {
       onTouchEnd={handleTouchEnd}
     >
       {/* Coordinates */}
-      <div className="absolute top-4 left-4 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm">
+      <div className="no-export absolute top-4 left-4 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm">
         {hovered ? `q: ${hovered.q}, r: ${hovered.r}` : "Touch or hover a hex"}
       </div>
 
@@ -279,13 +320,22 @@ export default function HexGrid() {
       <button
         onClick={handleUndo}
         disabled={history.length === 0}
-        className="absolute top-4 left-48 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm disabled:opacity-40"
+        className="no-export absolute top-4 left-48 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm disabled:opacity-40"
       >
         ↩ Undo
       </button>
 
+      {/* Export button */}
+      <button
+        onClick={handleExport}
+        disabled={exporting}
+        className="no-export absolute top-4 left-64 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm disabled:opacity-40"
+      >
+        {exporting ? "Exporting..." : "📷 Export"}
+      </button>
+
       {/* Tools panel */}
-      <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
+      <div className="no-export absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
         <div className="mb-2 font-semibold">Tools</div>
         <div className="flex gap-2 mb-3 flex-wrap">
           {PALETTE.map((c) => (
@@ -315,7 +365,7 @@ export default function HexGrid() {
       </div>
 
       {/* Brush size */}
-      <div className="absolute top-16 left-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
+      <div className="no-export top-16 left-4 absolute bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
         <div className="mb-1">Brush: {brushSize}</div>
         <input
           type="range"
@@ -327,6 +377,7 @@ export default function HexGrid() {
       </div>
 
       <svg
+        ref={svgRef}
         width="100%"
         height="100%"
         onMouseDown={handleMouseDown}
@@ -336,6 +387,12 @@ export default function HexGrid() {
           {hexagons}
         </g>
       </svg>
+
+      {exporting && (
+        <div className="absolute inset-0 bg-black/30 flex items-center justify-center text-white text-lg font-bold">
+          Preparing export...
+        </div>
+      )}
     </div>
   );
 }

@@ -17,7 +17,7 @@ const PALETTE = [
   "#60a5fa",
   "#fbbf24",
   "#a78bfa",
-  "#4ADEDE"
+  "#4ADEDE",
   "#00FFFF"
 ];
 

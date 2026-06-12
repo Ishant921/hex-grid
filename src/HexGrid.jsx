@@ -157,6 +157,7 @@ export default function HexGrid() {
     });
   };
 
+
   const handleExport = async () => {
     setExporting(true);
     await new Promise((res) => setTimeout(res, 50));

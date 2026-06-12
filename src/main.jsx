@@ -1,7 +1,12 @@
 import ReactDOM from "react-dom/client";
 
-const root = document.getElementById("root");
+try {
+  const root = document.getElementById("root");
 
-ReactDOM.createRoot(root);
+  ReactDOM.createRoot(root);
 
-document.body.innerHTML += "<p>createRoot worked</p>";
+  document.body.innerHTML += "<p>createRoot succeeded</p>";
+} catch (err) {
+  document.body.innerHTML +=
+    "<pre>" + err.toString() + "</pre>";
+}

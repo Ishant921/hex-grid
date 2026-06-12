@@ -1,7 +1,3 @@
 export default function App() {
-  return (
-    <div>
-      React Works!
-    </div>
-  );
+  return <h1>Hello React</h1>;
 }

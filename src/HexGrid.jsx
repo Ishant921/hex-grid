@@ -163,7 +163,8 @@ export default function HexGrid() {
     await new Promise((res) => setTimeout(res, 50));
 
     try {
-      const exportSize = 10;
+      const exportSize = 20;
+      const scale = 2;
       const range = 40;
       const padding = 40;
 
@@ -223,9 +224,10 @@ export default function HexGrid() {
 
       img.onload = () => {
         const canvas = document.createElement("canvas");
-        canvas.width = gridW;
-        canvas.height = gridH;
+        canvas.width = gridW * scale;
+        canvas.height = gridH * scale;
         const ctx = canvas.getContext("2d");
+        ctx.scale(scale, scale);
         ctx.drawImage(img, 0, 0);
         URL.revokeObjectURL(url);
 

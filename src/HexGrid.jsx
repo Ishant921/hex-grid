@@ -20,22 +20,78 @@ const PALETTE = [
   "#4ADEDE"
 ];
 
+const ERASER = "ERASER";
+
+function buildInitialColors() {
+  const range = 40;
+  const innerRadius = 17;
+  const outerRings = 5;
+  const initial = {};
+
+  for (let q = -range; q <= range; q++) {
+    for (let r = -range; r <= range; r++) {
+      const s = -q - r;
+      const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
+
+      if (dist <= innerRadius) {
+        initial[`${q},${r}`] = "#f87171";
+      }
+
+      if (dist > range - outerRings && dist <= range) {
+        initial[`${q},${r}`] = "#60a5fa";
+      }
+    }
+  }
+
+  const extraRed = [
+    [0,-19],[1,-19],[2,-19],[3,-19],
+    [-1,-18],[0,-18],[1,-18],[2,-18],[3,-18],
+    [-2,-17],[-1,-17],
+    [-3,-16],[-2,-16],
+    [-3,-15],
+    [18,-3],[19,-3],[18,-2],[19,-2],[18,-1],[19,-1],[18,0],[19,0],
+    [17,1],[18,1],[16,2],[17,2],[15,3],[16,3],
+    [-18,15],[-19,16],[-18,16],[-19,17],[-18,17],[-19,18],[-18,18],
+    [-17,18],[-16,18],[-15,18],[-19,19],
+    [-18,19],[-17,19],[-16,19]
+  ];
+  extraRed.forEach(([q, r]) => {
+    initial[`${q},${r}`] = "#f87171";
+  });
+
+  return initial;
+}
+
+const PROTECTED = buildInitialColors();
+
 export default function HexGrid() {
   const baseSize = 20;
   const [zoom, setZoom] = useState(1);
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const [lastPos, setLastPos] = useState({ x: 0, y: 0 });
-  const [colors, setColors] = useState({});
+  const [colors, setColors] = useState(() => {
+    try {
+      const saved = localStorage.getItem("hex-grid-colors");
+      return saved ? JSON.parse(saved) : { ...PROTECTED };
+    } catch {
+      return { ...PROTECTED };
+    }
+  });
   const [hovered, setHovered] = useState(null);
   const [brushSize, setBrushSize] = useState(1);
-  const [selectedColor, setSelectedColor] = useState(PALETTE[0]);
+  const [selectedTool, setSelectedTool] = useState(PALETTE[0]);
+  const [history, setHistory] = useState([]);
 
   const lastTouchDist = useRef(null);
-  const longPressTimer = useRef(null);
-  const longPressTriggered = useRef(false);
 
   const size = baseSize * zoom;
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("hex-grid-colors", JSON.stringify(colors));
+    } catch {}
+  }, [colors]);
 
   const axialToPixel = (q, r) => {
     const x = size * Math.sqrt(3) * (q + r / 2);
@@ -43,45 +99,7 @@ export default function HexGrid() {
     return { x, y };
   };
 
-  useEffect(() => {
-    const range = 40;
-    const innerRadius = 17;
-    const outerRings = 5;
-    const initial = {};
-
-    for (let q = -range; q <= range; q++) {
-      for (let r = -range; r <= range; r++) {
-        const s = -q - r;
-        const dist = Math.max(Math.abs(q), Math.abs(r), Math.abs(s));
-
-        if (dist <= innerRadius) {
-          initial[`${q},${r}`] = "#f87171";
-        }
-
-        if (dist > range - outerRings && dist <= range) {
-          initial[`${q},${r}`] = "#60a5fa";
-        }
-      }
-    }
-
-    const extraRed = [
-      [0,-19],[1,-19],[2,-19],[3,-19],
-      [-1,-18],[0,-18],[1,-18],[2,-18],[3,-18],
-      [-2,-17],[-1,-17],
-      [-3,-16],[-2,-16],
-      [-3,-15],
-      [18,-3],[19,-3],[18,-2],[19,-2],[18,-1],[19,-1],[18,0],[19,0],
-      [17,1],[18,1],[16,2],[17,2],[15,3],[16,3],
-      [-18,15],[-19,16],[-18,16],[-19,17],[-18,17],[-19,18],[-18,18],
-      [-17,18],[-16,18],[-15,18],[-19,19],
-      [-18,19],[-17,19],[-16,19]
-    ];
-    extraRed.forEach(([q, r]) => {
-      initial[`${q},${r}`] = "#f87171";
-    });
-
-    setColors(initial);
-  }, []);
+  const isProtected = (key) => key in PROTECTED;
 
   const getBrushCells = (q, r, radius) => {
     const results = [];
@@ -96,38 +114,54 @@ export default function HexGrid() {
     return results;
   };
 
-  const paintCells = (cells, color) => {
+  const applyTool = (q, r) => {
+    const cells = getBrushCells(q, r, brushSize - 1);
+    const freeCells = cells.filter(([cq, cr]) => !isProtected(`${cq},${cr}`));
+    if (freeCells.length === 0) return;
+
     setColors((prev) => {
+      const snapshot = {};
+      freeCells.forEach(([cq, cr]) => {
+        snapshot[`${cq},${cr}`] = prev[`${cq},${cr}`];
+      });
+      setHistory((h) => [...h.slice(-49), snapshot]);
+
       const updated = { ...prev };
-      cells.forEach(([q, r]) => {
-        updated[`${q},${r}`] = color;
+      freeCells.forEach(([cq, cr]) => {
+        if (selectedTool === ERASER) {
+          delete updated[`${cq},${cr}`];
+        } else {
+          updated[`${cq},${cr}`] = selectedTool;
+        }
       });
       return updated;
     });
   };
 
-  const eraseCells = (cells) => {
+  const handleUndo = () => {
+    if (history.length === 0) return;
+    const last = history[history.length - 1];
+    setHistory((h) => h.slice(0, -1));
     setColors((prev) => {
       const updated = { ...prev };
-      cells.forEach(([q, r]) => {
-        delete updated[`${q},${r}`];
+      Object.entries(last).forEach(([key, val]) => {
+        if (val === undefined) {
+          delete updated[key];
+        } else {
+          updated[key] = val;
+        }
       });
       return updated;
     });
   };
 
   const handleClick = (key) => {
-    if (longPressTriggered.current) return;
     const [q, r] = key.split(",").map(Number);
-    const cells = getBrushCells(q, r, brushSize - 1);
-    paintCells(cells, selectedColor);
+    applyTool(q, r);
   };
 
   const handleRightClick = (e, key) => {
     e.preventDefault();
-    const [q, r] = key.split(",").map(Number);
-    const cells = getBrushCells(q, r, brushSize - 1);
-    eraseCells(cells);
   };
 
   const handleWheel = (e) => {
@@ -158,29 +192,16 @@ export default function HexGrid() {
   };
 
   const handleTouchStart = (e, key) => {
-    longPressTriggered.current = false;
-
     if (e.touches.length === 1) {
       setDragging(true);
       setLastPos({ x: e.touches[0].clientX, y: e.touches[0].clientY });
-
-      longPressTimer.current = setTimeout(() => {
-        const [q, r] = key.split(",").map(Number);
-        const cells = getBrushCells(q, r, brushSize - 1);
-        eraseCells(cells);
-        longPressTriggered.current = true;
-      }, 500);
     }
-
     if (e.touches.length === 2) {
       lastTouchDist.current = getTouchDistance(e.touches);
-      clearTimeout(longPressTimer.current);
     }
   };
 
   const handleTouchMove = (e) => {
-    clearTimeout(longPressTimer.current);
-
     if (e.touches.length === 1 && dragging) {
       const dx = e.touches[0].clientX - lastPos.x;
       const dy = e.touches[0].clientY - lastPos.y;
@@ -201,7 +222,6 @@ export default function HexGrid() {
   const handleTouchEnd = () => {
     setDragging(false);
     lastTouchDist.current = null;
-    clearTimeout(longPressTimer.current);
   };
 
   const counts = useMemo(() => {
@@ -250,21 +270,38 @@ export default function HexGrid() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Coordinates */}
       <div className="absolute top-4 left-4 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm">
         {hovered ? `q: ${hovered.q}, r: ${hovered.r}` : "Touch or hover a hex"}
       </div>
 
+      {/* Undo button */}
+      <button
+        onClick={handleUndo}
+        disabled={history.length === 0}
+        className="absolute top-4 left-48 bg-white/80 backdrop-blur px-3 py-2 rounded-xl shadow text-sm disabled:opacity-40"
+      >
+        ↩ Undo
+      </button>
+
+      {/* Tools panel */}
       <div className="absolute top-4 right-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
-        <div className="mb-2">Colors</div>
-        <div className="flex gap-2 mb-2">
+        <div className="mb-2 font-semibold">Tools</div>
+        <div className="flex gap-2 mb-3 flex-wrap">
           {PALETTE.map((c) => (
             <button
               key={c}
-              onClick={() => setSelectedColor(c)}
+              onClick={() => setSelectedTool(c)}
               style={{ background: c }}
-              className={`w-6 h-6 rounded ${selectedColor === c ? "ring-2 ring-black" : ""}`}
+              className={`w-7 h-7 rounded ${selectedTool === c ? "ring-2 ring-black scale-110" : ""}`}
             />
           ))}
+          <button
+            onClick={() => setSelectedTool(ERASER)}
+            className={`w-7 h-7 rounded border-2 border-gray-400 bg-white text-xs ${selectedTool === ERASER ? "ring-2 ring-black scale-110" : ""}`}
+          >
+            ✕
+          </button>
         </div>
 
         <div className="space-y-1">
@@ -277,8 +314,9 @@ export default function HexGrid() {
         </div>
       </div>
 
+      {/* Brush size */}
       <div className="absolute top-16 left-4 bg-white/80 backdrop-blur px-4 py-3 rounded-xl shadow text-sm">
-        <div className="mb-1">Brush size: {brushSize}</div>
+        <div className="mb-1">Brush: {brushSize}</div>
         <input
           type="range"
           min="1"
